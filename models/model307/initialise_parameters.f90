@@ -139,6 +139,11 @@ namelist /in1/  tstep, nstep, tstep_n, nstep_n,                     &
                 nsubstep_particles, restart_particles,              &
                 filter_perp,    filter_hyper,    filter_par,        &
                 filter_perp_n0, filter_hyper_n0, filter_par_n0,     &
+                T_EP_eV, RHO_EP, pdf_A, pdf_xi, pdf_omega,         &
+                pdf_alpha, pdf_flatness,                    &
+                particle_pusher, Lambda_peak, delta_Lambda,                    &
+                output_pe_E_mu, output_pe_mu_Pphi,                    &
+                use_pe_EmuPphi,                                     &
                 use_kn_cx, use_kn_sputtering, use_kn_ionisation,    &
                 use_ncs, use_pcs, use_ccs, use_pcs_full,            &
                 restart_particles,                                  &

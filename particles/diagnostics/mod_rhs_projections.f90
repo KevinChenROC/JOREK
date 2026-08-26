@@ -9,7 +9,7 @@ use mod_particle_sim
 implicit none
 private
 
-public proj_f, proj_f_interface, proj_one, proj_q, proj_vR, proj_vZ, proj_vPhi, proj_Ekin, proj_Ekin_keV, proj_jR, proj_jZ, proj_jPhi
+public proj_f, proj_f_interface, proj_one, proj_one_weighted, proj_q, proj_vR, proj_vZ, proj_vPhi, proj_Ekin, proj_Ekin_keV, proj_jR, proj_jZ, proj_jPhi
 public proj_R, proj_min_rad, proj_Z,proj_v,proj_vpar,proj_mu,proj_pow
 
 interface
@@ -42,6 +42,14 @@ contains
     real*8 :: proj_one
     proj_one = 1.d0
   end function proj_one
+  
+  pure function proj_one_weighted(sim, group, particle)
+    type(particle_sim), intent(in) :: sim
+    integer, intent(in) :: group
+    class(particle_base), intent(in) :: particle
+    real*8 :: proj_one_weighted
+    proj_one_weighted = 1.d0 * particle%weight
+  end function proj_one_weighted
 
   pure function proj_R(sim,group,particle)
     type(particle_sim), intent(in) :: sim
@@ -214,16 +222,27 @@ contains
   end function proj_vPhi
 
   !< Energy in joules
-  pure function proj_Ekin(sim, group, particle) 
+  function proj_Ekin(sim, group, particle) 
     use constants, only: atomic_mass_unit
     use mod_particle_types, only: particle_kinetic_leapfrog
+    use mod_gc_relativistic, only: compute_relativistic_factor
+    use constants, only: SPEED_OF_LIGHT
+
     type(particle_sim), intent(in) :: sim
     integer, intent(in) :: group
     class(particle_base), intent(in) :: particle
     real*8 :: proj_Ekin
+    ! Variables
+    real*8 :: B(3), E(3), psi, U, gamma, mass_AMU
+    
+    mass_AMU = sim%groups(group)%mass
     select type (p => particle)
     type is (particle_kinetic_leapfrog)
       proj_Ekin = sim%groups(group)%mass * atomic_mass_unit * dot_product(p%v,p%v)/2.d0
+    type is (particle_gc_relativistic)
+      call sim%fields%calc_EBpsiU(sim%time,p%i_elm,p%st,p%x(3),E,B,psi,U)
+      gamma = compute_relativistic_factor(p, mass_AMU, norm2(B))
+      proj_Ekin = (gamma - 1) * mass_AMU * atomic_mass_unit * SPEED_OF_LIGHT**2 * p%weight
     class default
       proj_Ekin = 0.d0
     end select

@@ -2216,7 +2216,7 @@ contains
     else
        write(uout_mem,'(A20,A50,1f10.3,A)') label, &
             'memsize occupied by libraries/others = ', &
-            lcount, ' Bytes'
+            dfloat(lcount), ' Bytes'
     end if
 #ifdef USE_PASTIX
     call pastix_getmem(pcount)

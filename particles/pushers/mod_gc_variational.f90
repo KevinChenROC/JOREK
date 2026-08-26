@@ -422,7 +422,7 @@ enddo
 return
 end
 
-subroutine push_gc_rk4(fields, particle_gc, mass, timestep, n_steps, n_gyro_phases, gyro_shift)
+subroutine push_gc_rk4(fields, particle_gc, mass, timestep, n_steps, n_gyro_phases, gyro_shift, time_start)
 use nodes_elements
 use mod_find_rz_nearby
 use mod_fields, only: fields_base
@@ -434,6 +434,7 @@ real*8, intent(in)     :: mass          ! [amu]
 integer, intent(in)    :: n_steps       ! number of time steps 
 integer, intent(in)    :: n_gyro_phases ! number of gyro phases for gyro-averaging
 real*8, intent(out), optional :: gyro_shift(3) ! shift of the gyro centre from guiding centre
+real*8, intent(in), optional  :: time_start     ! starting time for time-dependent fields [s]
 
 real*8 :: A_0(3), dA_0(3,3), B_0(3), dB_0(3,3), bn_0, dbn_0(3), Bnorm_0(3), dBnorm_0(3,3), E_0(3)
 real*8 :: A_1(3), dA_1(3,3), B_1(3), dB_1(3,3), bn_1, dbn_1(3), Bnorm_1(3), dBnorm_1(3,3), E_1(3)
@@ -465,6 +466,13 @@ call copy_particle_gc_vpar(particle_gc,p_1)
 call copy_particle_gc_vpar(particle_gc,p_2)
 call copy_particle_gc_vpar(particle_gc,p_3)
 
+! Initialize time for time-dependent fields
+if (present(time_start)) then
+  time_0 = time_start
+else
+  time_0 = 0.d0
+endif
+
 call fields%calc_RK4(time_0, p_0%i_elm, p_0%st, p_0%x(3), A_0, dA_0, B_0, dB_0, Bnorm_0, dBnorm_0, bn_0, dbn_0, E_0)
 !call fields%calc_RK4_analytic(p_0%x(1), p_0%x(2), p_0%x(3), A_0, dA_0, B_0, dB_0, Bnorm_0, dBnorm_0, bn_0, dbn_0, E_0)
 
@@ -472,6 +480,11 @@ call convert_gc_vpar_to_kinetic(node_list, element_list, p_0, B_0, mass, n_gyro_
 call fields%calc_gyro_average_E(time_0, p_orbit, n_gyro_phases, E_0)
 
 do i =1, n_steps
+  
+  ! Set times for RK4 stages with time-dependent fields
+  time_1 = time_0 + 0.5d0 * timestep
+  time_2 = time_0 + 0.5d0 * timestep
+  time_3 = time_0 + timestep
   
   call rk4_step(p_0%x, p_0%vpar, qom, p_0%mu, E_0, B_0, Bnorm_0, dBnorm_0, dBn_0, delta_x1, delta_u1)
 
@@ -487,7 +500,7 @@ do i =1, n_steps
  !call fields%calc_RK4_analytic(p_1%x(1), p_1%x(2), p_1%x(3), A_1, dA_1, B_1, dB_1, Bnorm_1, dBnorm_1, bn_1, dbn_1, E_1)
 
   call convert_gc_vpar_to_kinetic(node_list, element_list, p_1, B_1, mass, n_gyro_phases, p_orbit, ifail)
-  call fields%calc_gyro_average_E(time_0, p_orbit, n_gyro_phases, E_1)
+  call fields%calc_gyro_average_E(time_1, p_orbit, n_gyro_phases, E_1)
   
   call rk4_step(p_1%x, p_1%vpar, qom, p_1%mu, E_1, B_1, Bnorm_1, dBnorm_1, dBn_1, delta_x2, delta_u2)
 
@@ -502,7 +515,7 @@ do i =1, n_steps
  !call fields%calc_RK4_analytic(p_2%x(1), p_2%x(2), p_2%x(3), A_2, dA_2, B_2, dB_2, Bnorm_2, dBnorm_2, bn_2, dbn_2, E_2)
             
   call convert_gc_vpar_to_kinetic(node_list, element_list, p_2, B_2, mass, n_gyro_phases, p_orbit, ifail)
-  call fields%calc_gyro_average_E(time_0, p_orbit, n_gyro_phases, E_2)
+  call fields%calc_gyro_average_E(time_2, p_orbit, n_gyro_phases, E_2)
 
   call rk4_step(p_2%x, p_2%vpar, qom, p_2%mu, E_2, B_2, Bnorm_2, dBnorm_2, dBn_2, delta_x3, delta_u3)
 
@@ -518,7 +531,7 @@ do i =1, n_steps
  !call fields%calc_RK4_analytic(p_3%x(1), p_3%x(2), p_3%x(3), A_3, dA_3, B_3, dB_3, Bnorm_3, dBnorm_3, bn_3, dbn_3, E_3)
     
   call convert_gc_vpar_to_kinetic(node_list, element_list, p_3, B_3, mass, n_gyro_phases, p_orbit, ifail)
-  call fields%calc_gyro_average_E(time_0, p_orbit, n_gyro_phases, E_3)
+  call fields%calc_gyro_average_E(time_3, p_orbit, n_gyro_phases, E_3)
 
   call rk4_step(p_3%x, p_3%vpar, qom, p_3%mu, E_3, B_3, Bnorm_3, dBnorm_3, dBn_3, delta_x4, delta_u4)
                                 
@@ -530,6 +543,9 @@ do i =1, n_steps
                       p_0%x(1),  p_0%x(2),  p_0%st(1),  p_0%st(2),  p_0%i_elm, ifail)
 
   if (p_0%i_elm .le. 0) return
+
+  ! Advance time for next iteration
+  time_0 = time_0 + timestep
 
 enddo
 
@@ -562,7 +578,7 @@ implicit none
 real*8, intent(in) :: x(3), A(3), dA(3,3)
 real*8             :: rotA(3)
   rotA(1) = dA(3,2) - dA(2,3) / x(1)
-  rotA(2) = dA(1,3) - dA(3,1) - A(3) / x(1)
+  rotA(2) = dA(1,3)/x(1) - dA(3,1) - A(3) / x(1)
   rotA(3) = dA(2,1) - dA(1,2) 
 return
 end    
@@ -574,7 +590,9 @@ real*8 :: Bstar(3), Estar(3), Bpar_star, delta_x(3), delta_u
   
   Bstar     = B + vpar * rot_tmp(x,Bnorm,dBnorm) / qom
   Bpar_star = dot_product(Bstar,Bnorm)
-  Estar     = E - zmu * dB /qom
+  ! Estar     = E - zmu * dB /qom
+  Estar(1:2)   = E(1:2) - zmu * dB(1:2)    /qom
+  Estar(3)     = E(3)   - zmu * dB(3)/x(1) /qom ! for 1/R in front of  ∂/∂phi, since dB(3) = ∂B/∂phi
         
   delta_x = (Bstar * vpar  - cross(Bnorm, Estar)) / Bpar_star
   delta_u = dot_product(Bstar,Estar) * qom        / Bpar_star

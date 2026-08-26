@@ -36,6 +36,7 @@ module mod_sampling
   public :: sample_uniform_sphere
   public :: sample_uniform_sphere_corona_rthetaphi
   public :: sample_uniform_sphere_corona_rcosphi
+  public :: c_erfinv
 
   !> Switch here which procedure to use by default. The other ones can be found
   !> by their name
@@ -56,6 +57,16 @@ module mod_sampling
   interface sample_uniform_sphere_corona_rcosphi
     module procedure sample_uniform_sphere_corona_rcosphi_r8
   end interface sample_uniform_sphere_corona_rcosphi
+
+  !> C binding interface to the inverse error function erfinv from math.h
+  interface
+    function c_erfinv(x) bind(c, name="erfinv")
+      use iso_c_binding, only: c_double
+      implicit none
+      real(c_double), value :: x
+      real(c_double) :: c_erfinv
+    end function c_erfinv
+  end interface
 
   !> The Thompson distribution with parameters E_b and n
   type, extends(ddfun) :: thompson_dist

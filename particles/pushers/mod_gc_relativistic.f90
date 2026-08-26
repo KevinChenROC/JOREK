@@ -15,6 +15,7 @@ module mod_gc_relativistic
   public relativistic_gc_to_gc
   public compute_relativistic_factor
   public compute_relativistic_gc_rhs
+  public rel_momentum, rel_kinetic_energy
   public relativistic_gc_to_relativistic_kinetic
   public relativistic_gc_momenta_from_E_cospitch
   public runge_kutta_fixed_dt_gc_push_jorek
@@ -818,6 +819,28 @@ contains
                        + 2.d0 * Bnorm * gc%p(2) / ( mass * SPEED_OF_LIGHT**2 ) )
   end function compute_relativistic_factor
 
+  function rel_momentum(gc, mass, Bnorm) result(p_rel)
+    type(particle_gc_relativistic), intent(in) :: gc
+    real*8, intent(in) :: mass, Bnorm !< mass [amu], B-field magnitude [T]
+    real*8 :: p_rel
+
+    p_rel = sqrt( ( gc%p(1) )**2 + 2.d0 * mass * Bnorm * gc%p(2) )
+  end function rel_momentum
+
+  function rel_kinetic_energy(gc, mass, Bnorm) result(E_kin)
+    implicit none
+    ! Input
+    type(particle_gc_relativistic), intent(in) :: gc
+    real*8, intent(in) :: mass, Bnorm !< mass [amu], B-field magnitude [T]
+    ! Output
+    real*8 :: E_kin ! in J
+    ! Variables
+    real*8 :: gamma, dummy_psi, dummy_U
+    real*8, dimension(3) :: dummy_E, dummy_B
+
+    gamma = compute_relativistic_factor(gc, mass, Bnorm)
+    E_kin = ( gamma - 1.d0 ) * mass * ATOMIC_MASS_UNIT * SPEED_OF_LIGHT**2 
+  end function rel_kinetic_energy
 
 end module mod_gc_relativistic
 

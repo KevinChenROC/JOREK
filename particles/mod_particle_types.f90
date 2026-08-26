@@ -82,7 +82,7 @@ module mod_particle_types
   !> A simple guiding-center particle type.
   type, extends(particle_base) :: particle_gc_vpar
     real*8    :: vpar   = 0.d0 !< Guiding centre parallel velocity [m/s]
-    real*8    :: mu     = 0.d0 !< The magnetic moment [eV/T] 
+    real*8    :: mu     = 0.d0 !< The magnetic moment = 0.5*v_perp^2/B [m^2/s^2/T]
     real*8    :: B_norm = 0.d0 !< norm of total magnetic field [T]
     integer*1 :: q      = 0_1  !< Charge [e]
   end type particle_gc_vpar

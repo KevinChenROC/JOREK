@@ -294,6 +294,8 @@ subroutine project_phase_space(this, sim, ev)
     !$omp schedule(dynamic,10) &
     !$omp reduction(+:val_tmp)
     do i=1,size(sim%groups(i_group_proj)%particles,1)
+      ! Skip particles without a valid element index to avoid invalid element/node access
+      if (sim%groups(i_group_proj)%particles(i)%i_elm .le. 0) cycle 
       proj_value = this%f_proj%f(sim,i_group_proj,sim%groups(i_group_proj)%particles(i))
       x_part     = this%f_grids%f(this%ndim,sim,i_group_proj,sim%groups(i_group_proj)%particles(i))
       call project_single_particle_x(this,x_part,val_tmp,proj_value)
@@ -399,7 +401,8 @@ subroutine output_phase_project(this,ino,output_grids_in)
         call h5dcreate_f(group_id_grid, tmp_name, H5T_NATIVE_DOUBLE, dspace, &
                        dset_id, ierrhdf5)
 
-        call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,RESHAPE(grid_mesh(:,it),res_tmp),int(res_tmp2,kind=HSIZE_T),ierr)
+        ! call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,RESHAPE(grid_mesh(:,it),res_tmp),int(res_tmp2,kind=HSIZE_T),ierr)
+        call h5_write_1d_as_nd_double(dset_id, grid_mesh(:,it), this%ndim, res_tmp, ierr) ! write the 1D array as an nD array into HDF5
         call h5dclose_f(dset_id,ierr)
         call h5sclose_f(dspace,ierr)
 
@@ -412,7 +415,8 @@ subroutine output_phase_project(this,ino,output_grids_in)
     ! The trick to gaining arbitrary dimensional arrays into HDF5 is by using reshape immediately in the function
     ! as this saves us a maximum-dimension array allocation in the code.
     ! Beware: stack limits for reshape! set "ulimit -s unlimited"
-    call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE,RESHAPE(val_output(1:size(val_output)),res_tmp),int(res_tmp2,kind=HSIZE_T),ierr)
+    ! call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE,RESHAPE(val_output(1:size(val_output)),res_tmp),int(res_tmp2,kind=HSIZE_T),ierr)
+    call h5_write_1d_as_nd_double(dset_id, val_output, this%ndim, res_tmp, ierr) ! write the 1D array as an nD array into HDF5
     call h5dclose_f(dset_id,ierr)
     call h5sclose_f(dspace,ierr)
     if(output_grids) then
@@ -551,5 +555,83 @@ function calc_reverse_index_phase_proj(this, index_values) result(index_arr)
   enddo
 
 end function calc_reverse_index_phase_proj
+
+subroutine h5_write_1d_as_nd_double(dset_id, vec, ndim, res, ierr)
+  integer(HID_T), intent(in)  :: dset_id
+  real(8),        intent(in)  :: vec(:)
+  integer,        intent(in)  :: ndim
+  integer,        intent(in)  :: res(7)     ! only res(1:ndim) used
+  integer,        intent(out) :: ierr
+
+  integer(HSIZE_T), allocatable :: dims(:)
+  
+  allocate(dims(ndim))
+  dims = int(res(1:ndim), kind=HSIZE_T)
+
+  ! sanity: product(res(1:ndim)) must equal size(vec)
+  if (product(res(1:ndim)) /= size(vec)) then
+    ierr = -1
+    deallocate(dims)
+    return
+  end if
+
+  select case (ndim)
+  case (1)
+    call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, vec, dims, ierr)
+
+  case (2)
+    block
+      real(8), allocatable :: a2(:,:)
+      allocate(a2(res(1), res(2)))
+      a2 = reshape(vec, [res(1), res(2)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a2, dims, ierr)
+    end block
+
+  case (3)
+    block
+      real(8), allocatable :: a3(:,:,:)
+      allocate(a3(res(1), res(2), res(3)))
+      a3 = reshape(vec, [res(1), res(2), res(3)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a3, dims, ierr)
+    end block
+
+  case (4)
+    block
+      real(8), allocatable :: a4(:,:,:,:)
+      allocate(a4(res(1), res(2), res(3), res(4)))
+      a4 = reshape(vec, [res(1), res(2), res(3), res(4)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a4, dims, ierr)
+    end block
+
+  case (5)
+    block
+      real(8), allocatable :: a5(:,:,:,:,:)
+      allocate(a5(res(1), res(2), res(3), res(4), res(5)))
+      a5 = reshape(vec, [res(1), res(2), res(3), res(4), res(5)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a5, dims, ierr)
+    end block
+
+  case (6)
+    block
+      real(8), allocatable :: a6(:,:,:,:,:,:)
+      allocate(a6(res(1), res(2), res(3), res(4), res(5), res(6)))
+      a6 = reshape(vec, [res(1), res(2), res(3), res(4), res(5), res(6)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a6, dims, ierr)
+    end block
+
+  case (7)
+    block
+      real(8), allocatable :: a7(:,:,:,:,:,:,:)
+      allocate(a7(res(1), res(2), res(3), res(4), res(5), res(6), res(7)))
+      a7 = reshape(vec, [res(1), res(2), res(3), res(4), res(5), res(6), res(7)])
+      call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, a7, dims, ierr)
+    end block
+
+  case default
+    ierr = -2
+  end select
+
+  deallocate(dims)
+end subroutine h5_write_1d_as_nd_double
 
 end module mod_phase_space_project

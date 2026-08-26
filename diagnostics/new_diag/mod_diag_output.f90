@@ -587,7 +587,6 @@ module mod_diag_output
         rho_norm = central_density *1.d20 * central_mass * atomic_mass_unit
         t_norm   = sqrt(MU_zero*rho_norm)
         call HDF5_real_saving(i_file,t_now*t_norm,'time'//char(0))
-        call HDF5_integer_saving(i_file,index_now,'index_now'//char(0))
       end if
     end if
     
@@ -665,7 +664,7 @@ module mod_diag_output
       if ( include_time ) then
         rho_norm = central_density *1.d20 * central_mass * atomic_mass_unit
         t_norm   = sqrt(MU_zero*rho_norm)
-        call HDF5_real_saving(i_file,t_now*t_norm,'time'//char(0))
+        ! call HDF5_real_saving(i_file,t_now*t_norm,'time'//char(0))
         call HDF5_integer_saving(i_file,index_now,'index_now'//char(0))
       end if
     end if

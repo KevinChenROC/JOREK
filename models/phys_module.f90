@@ -969,6 +969,19 @@ module phys_module
   real*8  :: filter_perp_n0   !< particle projection smoothing parameter, poloidal plane (n=0)
   real*8  :: filter_hyper_n0  !< particle projection smoothing parameter, poloidal plane (n=0)
   real*8  :: filter_par_n0    !< particle projection smoothing parameter, parallel direction (n=0)
+  real*8  :: T_EP_eV          !< EP temperature in eV (for MJ distribution)
+  real*8  :: RHO_EP           !< Total number of EP Particles
+  real*8  :: Lambda_peak      !< peak of gaussian distribution exp[-0.5(Λ-Lambda_peak)^2/(delta_Lambda^2)] for Λ = mu B0/ E
+  character(len=80)  :: particle_pusher  !< Particle pusher, e.g. gc_rel, kin_rel
+  real*8  :: delta_Lambda     !< delta_Lambda/sqrt(2) is the standard deviation of the pitch angle gaussian distribution
+  logical :: output_pe_E_mu    !< output power exchange files in (psi_N, E, mu), E=(gamma-1)mc^2 [keV]
+  logical :: output_pe_mu_Pphi !< output power exchange files in (psi_N, mu, P_phi)
+  logical :: use_pe_EmuPphi    !< if .true., output power exchange in (E, mu, P_phi); independent of output_pe_E_mu / output_pe_mu_Pphi
+  real*8  :: pdf_A            !< skewed-normal amplitude A (parametric pdf)
+  real*8  :: pdf_xi           !< skewed-normal location xi (parametric pdf)
+  real*8  :: pdf_omega        !< skewed-normal width omega (parametric pdf)
+  real*8  :: pdf_alpha        !< skewed-normal skewness alpha (parametric pdf)
+  real*8  :: pdf_flatness     !< skewed-normal generalized Gaussian exponent (parametric pdf)
 
   real*8  :: puff_rate        !< physical atoms/sec puffed (shared over 2 places)
   real*8  :: r_valve          !< radius of poloidal circular source

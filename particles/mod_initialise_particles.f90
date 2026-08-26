@@ -380,7 +380,8 @@ subroutine initialise_particles_in_phase_space(n_variables, particles, fields, r
   logical                                  :: rng_n_streams_round_off
   real*8                                   :: weight,one_over_sup_pdf,one_over_sup_gdf
   real*8,dimension(2)                      :: st
-  real*8,dimension(:),allocatable          :: variables,real_pdf_param,real_weight_param
+  real*8,dimension(n_variables+1)          :: variables
+  real*8,dimension(:),allocatable          :: real_pdf_param,real_weight_param
   real*8,dimension(:),allocatable          :: real_gdf_param,real_samp_to_part_param
 
   !> extract id and size of the MPI Communicator
@@ -391,7 +392,6 @@ subroutine initialise_particles_in_phase_space(n_variables, particles, fields, r
   !> initialize random number generator
   n_threads = 1
 !$ n_threads = omp_get_max_threads()
-  allocate(variables(n_variables+1))
   allocate(rngs(n_threads),source=rng_base)
   do ii=1,n_threads
     call rngs(ii)%initialize(n_variables+1, random_seed(), n_cpu*n_threads, &
@@ -449,7 +449,7 @@ subroutine initialise_particles_in_phase_space(n_variables, particles, fields, r
   n_int_samp_to_part_param = 0; if(present(n_int_samp_to_part_param_in)) &
   n_int_samp_to_part_param = n_int_samp_to_part_param_in;
   if((present(int_samp_to_part_param_in)).and.(n_int_samp_to_part_param.gt.0)) then
-    if(allocated(int_samp_to_part_param)) then
+    if(allocated(int_samp_to_part_param_in)) then
       allocate(int_samp_to_part_param(n_int_samp_to_part_param)); int_samp_to_part_param = int_samp_to_part_param_in;
     endif
   endif
@@ -493,7 +493,7 @@ subroutine initialise_particles_in_phase_space(n_variables, particles, fields, r
       particles(ii)%st     = st
       particles(ii)%i_elm  = i_elm
       particles(ii)%weight = weight
-      !> transform the remaining variables of the sampe in particle coordinates
+      !> transform the remaining variables of the sampe in particle coordinates      
       call sample_to_particle(particles(ii),n_variables,variables(1:n_variables),time,fields,&
       n_real_samp_to_part_param,real_samp_to_part_param,n_int_samp_to_part_param,&
       int_samp_to_part_param)
@@ -505,7 +505,7 @@ subroutine initialise_particles_in_phase_space(n_variables, particles, fields, r
 
   !> clean-up
   call system_clock(t1)
-  deallocate(variables); deallocate(rngs);
+  deallocate(rngs);
   if(allocated(real_pdf_param))          deallocate(real_pdf_param)
   if(allocated(int_pdf_param))           deallocate(int_pdf_param)
   if(allocated(real_weight_param))       deallocate(real_weight_param)
@@ -572,6 +572,7 @@ n_real_gdf_param,real_gdf_param,n_int_gdf_param,int_gdf_param) result(rej)
   !> check if the particle is valid
   rej = .true.
   if(i_elm.le.0) return
+  if(i_elm.gt.fields%element_list%n_elements) return
   if(weight.le.0d0) return
   if((st(1).lt.0.d0).or.(st(1).gt.1.d0)) return
   if((st(2).lt.0.d0).or.(st(2).gt.1.d0)) return

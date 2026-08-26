@@ -249,6 +249,7 @@ contains
          abs(compute_user_err(fields,n_variables,n_int_parameters, &
          n_real_parameters,t_new,solution,solution_low_order,      &
          int_parameters,real_parameters)))
+       iteration = iteration + 1
     enddo
     !> When a time step reduction has been done, the used time step
     !> is also the suggested time step for the next push
@@ -537,7 +538,7 @@ contains
     do i=1,n_stages
       !> compute solution
       solution_1 = solution_1 + C_vect(i)*differentials(n_variables*(i-1)+1:i*n_variables)
-      solution_2 = solution_2 + C_vect(n_stages+1)*differentials(n_variables*(i-1)+1:i*n_variables)
+      solution_2 = solution_2 + C_vect(n_stages+i)*differentials(n_variables*(i-1)+1:i*n_variables)
     enddo
     
   end subroutine compute_runge_kutta_solution_2

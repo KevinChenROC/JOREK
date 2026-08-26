@@ -341,6 +341,11 @@ subroutine runge_kutta_fixed_dt_relativistic_particle_push_jorek( &
   real(kind=8), dimension(2) :: st_new
   real(kind=8), dimension(6) :: solution_new
 
+  ! subroutine runge_kutta_fixed_dt(compute_rhs,fields,n_variables, &
+  !   n_int_parameters,n_real_parameters,t,dt,solution_old,         &
+  !   int_parameters,real_parameters,solution,ifail)
+
+
   !> apply the RK scheme
   call runge_kutta_fixed_dt(                                    &
     compute_relativistic_particle_derivatives_jorek,fields,     &
@@ -439,7 +444,7 @@ subroutine compute_relativistic_particle_derivatives_jorek(fields, &
   real(kind=8), dimension(n_variables), intent(out) :: derivatives
   integer, intent(out)                              :: ifail
   !> internal variables
-  integer                    :: ierr
+  integer                    :: ierr, i_elm_new
   real(kind=8)               :: psi, U
   real(kind=8), dimension(2) :: st_new !< new local coordinates
   real(kind=8), dimension(3) :: B, E
@@ -448,11 +453,16 @@ subroutine compute_relativistic_particle_derivatives_jorek(fields, &
   call find_rz_nearby(fields%node_list,fields%element_list,solution_old(1),&
        solution_old(2),real_parameters(1),real_parameters(2),&
        int_parameters(1),solution(1),solution(2),st_new(1),&
-       st_new(2),ifail,ierr)
+       st_new(2),i_elm_new,ierr)
        
-  !> compute the electromagnetic fields
-  if(ifail.ne.0) call fields%calc_EBpsiU(t,ifail,st_new,solution(3),&
-       E,B,psi,U)
+  !> compute the electromagnetic fields (only if the particle is still inside the domain)
+  if(i_elm_new.gt.0) then
+     call fields%calc_EBpsiU(t,i_elm_new,st_new,solution(3),&
+          E,B,psi,U)
+     ifail = 1
+  else
+     ifail = 0
+  end if
        
   !> compute RHS terms of relativistic equations of motion needed for RK integration
   derivatives = compute_relativistic_particle_rhs(int_parameters(2), &
