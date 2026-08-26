@@ -975,8 +975,8 @@ module phys_module
   character(len=80)  :: particle_pusher  !< Particle pusher, e.g. gc_rel, kin_rel
   real*8  :: delta_Lambda     !< delta_Lambda/sqrt(2) is the standard deviation of the pitch angle gaussian distribution
   logical :: output_pe_E_mu    !< output power exchange files in (psi_N, E, mu), E=(gamma-1)mc^2 [keV]
-  logical :: output_pe_mu_Pphi !< output power exchange files in (psi_N, mu, P_phi)
-  logical :: use_pe_EmuPphi    !< if .true., output power exchange in (E, mu, P_phi); independent of output_pe_E_mu / output_pe_mu_Pphi
+  logical :: output_pe_vpar_mu !< output power exchange files in (psi_N, mu, P_phi)
+  logical :: use_pe_EmuPphi    !< if .true., output power exchange in (E, mu, P_phi); independent of output_pe_E_mu / output_pe_vpar_mu
   real*8  :: pdf_A            !< skewed-normal amplitude A (parametric pdf)
   real*8  :: pdf_xi           !< skewed-normal location xi (parametric pdf)
   real*8  :: pdf_omega        !< skewed-normal width omega (parametric pdf)

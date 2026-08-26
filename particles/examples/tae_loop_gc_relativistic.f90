@@ -16,7 +16,7 @@ use nodes_elements
 use phys_module, only: tstep, restart, t_start, restart_particles, nout_projection, nout
 use phys_module, only: CENTRAL_MASS, CENTRAL_DENSITY, xcase, xpoint, amin, F0, R_geo
 use phys_module, only: n_particles, nstep_particles, nsubstep_particles, tstep_particles
-use phys_module, only: filter_perp, filter_hyper, filter_par, filter_perp_n0, filter_hyper_n0, filter_par_n0, T_EP_eV, RHO_EP, Lambda_peak, delta_Lambda, output_pe_E_mu, output_pe_mu_Pphi, use_pe_EmuPphi
+use phys_module, only: filter_perp, filter_hyper, filter_par, filter_perp_n0, filter_hyper_n0, filter_par_n0, T_EP_eV, RHO_EP, Lambda_peak, delta_Lambda, output_pe_E_mu, output_pe_vpar_mu, use_pe_EmuPphi
 use phys_module, only: n_mode_families
 use phys_module, only: particle_pusher
 
@@ -68,7 +68,7 @@ integer, allocatable :: int_param_sampler(:)
 ! isotropic momentum split beta = 2u-u^2, random phi in [0,2pi), isotropic pressure feedback.
 ! NOTE: T_EP_eV and RHO_EP are NOT hardcoded here - they are read from the namelist (&in1).
 real*8, parameter :: &
-                      A_MINOR          = 0.85          , &    ! in meter
+                      A_MINOR          = 0.4          , &    ! in meter
                       Poloidalbound(2) = [0.d0, TWOPI], &
                       Phibound(2)      = [0.d0, TWOPI], &
                       ! Pbound(2)        = [1.5d4, 2.5d7],&  ! [AMU·m/s] for deuterium ions at T_EP = 100 keV
@@ -88,7 +88,7 @@ real   , parameter :: TAE_FREQ      = 300d3  ! Precomputed analytical TAE freque
 integer, parameter :: N_TOR_RESONANCE      = 4   !< toroidal mode number n in resonance condition
 integer, parameter :: MIN_PERIODS_RESONANCE = 5  !< minimum completed periods before computing L
 logical, parameter :: &
-                      use_CGL_pressure                      = .false.,   & ! .true.: full CGL anisotropic pressure tensor (needs use_pcs_full=.t.); .false.: isotropic (1/3)p^2 diagonal
+                      use_CGL_pressure                      = .true.,   & ! .true.: full CGL anisotropic pressure tensor (needs use_pcs_full=.t.); .false.: isotropic (1/3)p^2 diagonal
                       use_trap_passing_for_PE               = .true.    ! whether to distinguish the power exchange due to trapped particles and that due to passing particles
 integer   :: n_real_gdf_param, n_real_pdf_param, n_variables, n_int_param_sampler, RZ_OUTPUT_STEPS, POWER_EXCHANGE_STEPS, PARTICLE_OUTPUT_STEPS
 integer   :: n_particles_local,n_reflect,ifail,dummy_int, ino
@@ -494,7 +494,7 @@ call MPI_BARRIER(MPI_COMM_WORLD,ifail)
 
 ! Set up 3D power exchange. Each family is independent and enabled by its own flag:
 !   output_pe_E_mu     -> (psi_N, E, mu)     E [keV], mu [eV/T]
-!   output_pe_mu_Pphi  -> (psi_N, mu, P_phi) mu [eV/T], P_phi [AMU·m²/s]
+!   output_pe_vpar_mu  -> (psi_N, vpar, mu)  vpar [m/s], mu [eV/T]
 !   use_pe_EmuPphi     -> (E, mu, P_phi)     E [keV], mu [eV/T], P_phi [AMU·m²/s]
 ! The families are NOT exclusive: any combination may be enabled. Only enabled
 ! families are allocated/output, to save memory and compute time.
@@ -510,15 +510,15 @@ power_exchange_Emu_pass%values = 0.0d0
   call output_phase_project(power_exchange_Emu, 0, output_grids_in=.true.)
 end if
 
-! (psi_N, mu, P_phi): dim 1 psi_N, dim 2 mu [eV/T], dim 3 P_phi [AMU·m²/s]
-!   P_phi = q*psi + p_par_SI * R * Bphi/B   (SI, then /ATOMIC_MASS_UNIT)
-!   Bphi = B(3) is the physical toroidal component from calc_EBpsiU
-if (output_pe_mu_Pphi) then
-  power_exchange_vpar_mu = new_phase_space_projection(ndim=3,res=[91,281,301], start=[0.d0,0.d0,7.d5], end=[1.0,1.0d6,0.8d7],basename="power_exchange_psiN_muPphi")
+! (psi_N, vpar, mu): dim 1 psi_N, dim 2 vpar [m/s], dim 3 mu [eV/T]
+!   vpar = p_par / (gamma * m) in [m/s]  (vpar bounds from tae_loop_gc_relativistic_wang2020)
+!   mu   = magnetic moment in [eV/T]
+if (output_pe_vpar_mu) then
+  power_exchange_vpar_mu = new_phase_space_projection(ndim=3,res=[91,301,281], start=[0.d0,vparbound(1),0.d0], end=[1.0,vparbound(2),1.0d6],basename="power_exchange_psiN_vparMu")
   power_exchange_vpar_mu%values = 0.0d0
-  power_exchange_vpar_mu_trap = new_phase_space_projection(ndim=3,res=[91,281,301], start=[0.d0,0.d0,7.d5], end=[1.0,1.0d6,0.8d7],basename="power_exchange_psiN_muPphi_trap")
+  power_exchange_vpar_mu_trap = new_phase_space_projection(ndim=3,res=[91,301,281], start=[0.d0,vparbound(1),0.d0], end=[1.0,vparbound(2),1.0d6],basename="power_exchange_psiN_vparMu_trap")
   power_exchange_vpar_mu_trap%values = 0.0d0
-  power_exchange_vpar_mu_pass = new_phase_space_projection(ndim=3,res=[91,281,301], start=[0.d0,0.d0,7.d5], end=[1.0,1.0d6,0.8d7],basename="power_exchange_psiN_muPphi_pass")
+  power_exchange_vpar_mu_pass = new_phase_space_projection(ndim=3,res=[91,301,281], start=[0.d0,vparbound(1),0.d0], end=[1.0,vparbound(2),1.0d6],basename="power_exchange_psiN_vparMu_pass")
   power_exchange_vpar_mu_pass%values = 0.0d0
   call output_phase_project(power_exchange_vpar_mu, 0, output_grids_in=.true.)
 end if
@@ -656,7 +656,7 @@ do while (.not. sim%stop_now)
       power_exchange_Emu_pass%values = 0.d0
     end if
     ! (psi_N, mu, P_phi)
-    if (output_pe_mu_Pphi) then
+    if (output_pe_vpar_mu) then
       if(use_trap_passing_for_PE .and. trim(particle_pusher) == 'gc_rel') then
         call output_phase_project(power_exchange_vpar_mu_trap, ino + index_start, output_grids_in=.false.)
         call output_phase_project(power_exchange_vpar_mu_pass, ino + index_start, output_grids_in=.false.)
@@ -795,7 +795,7 @@ jorek_feedback%rhs_gather_time = jorek_feedback%rhs_gather_time + n_steps * time
 allocate(feedback_rhs,source=jorek_feedback%rhs)
 ! Allocate with correct shape, but initialise to 0 (not source values).
 ! Allocate accumulators per enabled family (size-1 dummies keep OMP reductions valid).
-if (output_pe_mu_Pphi) then
+if (output_pe_vpar_mu) then
 allocate(phase_proj_1,    mold=power_exchange_vpar_mu%values);      phase_proj_1    = 0.d0
 else
   allocate(phase_proj_1(1), source=0.d0)
@@ -828,7 +828,7 @@ type is (particle_kinetic_relativistic)
  !$omp shared(sim, particles, n_steps, timesteps, rng, particle_start_time,        &
  !$omp rho_norm, t_norm, v_norm, E_norm, M_norm, N_norm, target_time, tmid,       &
  !$omp jorek_feedback, power_exchange_vpar_mu, power_exchange_Emu, power_exchange_EmuPphi, &
- !$omp output_pe_E_mu, output_pe_mu_Pphi, use_pe_EmuPphi, ES)                              &
+ !$omp output_pe_E_mu, output_pe_vpar_mu, use_pe_EmuPphi, ES)                              &
 #endif
  !$omp private(particle_tmp, particle_mid, gc_mid, i,j,k,l,m, t, E, B, psi, psiN, psiN_mid, U, rz_old, st_old, r, v, tmp2,    &
  !$omp i_elm_old, i_elm, n_e, T_e, E_diff, avgB, B_mag,                                               & 
@@ -954,7 +954,7 @@ type is (particle_kinetic_relativistic)
         
         ! No trap/pass split for kinetic — project to combined power exchange only
         if (output_pe_E_mu)     call project_single_particle_x(power_exchange_Emu,[psiN_mid,E_mid_keV,mumid],phase_proj_1_E,E_diff)
-        if (output_pe_mu_Pphi)  call project_single_particle_x(power_exchange_vpar_mu,[psiN_mid,mumid,Pphi_mid],phase_proj_1,E_diff)
+        if (output_pe_vpar_mu)  call project_single_particle_x(power_exchange_vpar_mu,[psiN_mid,vparmid,mumid],phase_proj_1,E_diff)
         if (use_pe_EmuPphi)     call project_single_particle_x(power_exchange_EmuPphi,[E_mid_keV,mumid,Pphi_mid],phase_proj_1_EP,E_diff)
   
       endif ! psiN and midpoint check for projection 
@@ -970,7 +970,7 @@ end select
 jorek_feedback%rhs = feedback_rhs
 ! No trap/pass split for kinetic — only combined power exchange
 if (output_pe_E_mu)     power_exchange_Emu%values    = power_exchange_Emu%values    + phase_proj_1_E
-if (output_pe_mu_Pphi)  power_exchange_vpar_mu%values = power_exchange_vpar_mu%values + phase_proj_1
+if (output_pe_vpar_mu)  power_exchange_vpar_mu%values = power_exchange_vpar_mu%values + phase_proj_1
 if (use_pe_EmuPphi)     power_exchange_EmuPphi%values = power_exchange_EmuPphi%values + phase_proj_1_EP
 deallocate(phase_proj_1)
 deallocate(phase_proj_1_E)
@@ -1068,7 +1068,7 @@ allocate(feedback_rhs,source=jorek_feedback%rhs)
 ! Allocate accumulators per enabled family. Disabled families get size-1 dummies so
 ! the OMP reduction clauses stay valid even though they are never written.
 ! (psi_N, mu, P_phi)
-if (output_pe_mu_Pphi) then
+if (output_pe_vpar_mu) then
 allocate(phase_proj_1,    mold=power_exchange_vpar_mu%values);      phase_proj_1    = 0.d0
 allocate(phase_proj_trap, mold=power_exchange_vpar_mu_trap%values);  phase_proj_trap = 0.d0
 else
@@ -1116,7 +1116,7 @@ type is (particle_gc_relativistic)
  !$omp jorek_feedback, power_exchange_vpar_mu, power_exchange_vpar_mu_trap, power_exchange_vpar_mu_pass,                &
  !$omp power_exchange_Emu, power_exchange_Emu_trap, power_exchange_Emu_pass,        &
  !$omp power_exchange_EmuPphi, power_exchange_EmuPphi_trap, power_exchange_EmuPphi_pass, &
- !$omp output_pe_E_mu, output_pe_mu_Pphi, use_pe_EmuPphi,                           &
+ !$omp output_pe_E_mu, output_pe_vpar_mu, use_pe_EmuPphi,                           &
  !$omp theta_prev_arr, theta_accum_arr, dtheta_prev_arr, trap_pass_arr,            &
  !$omp phi_unwrap_arr, phi_prev_arr,                                               &
  !$omp t_ref_a_arr, phi_ref_a_arr, t_ref_b_arr, phi_ref_b_arr,                     &
@@ -1337,7 +1337,7 @@ type is (particle_gc_relativistic)
         B_mag = norm2(B)
         gamma = compute_relativistic_factor(particle_mid, sim%groups(1)%mass, B_mag)
 
-        ! psiN from midpoint (consistent with mumid, Pphi_mid)
+        ! psiN from midpoint (consistent with mumid, vparmid, Pphi_mid)
         psiN_mid = (psi - ES%Psi_axis) / (ES%Psi_bnd - ES%Psi_axis)
         
         mumid   = particle_mid%p(2) * ATOMIC_MASS_UNIT / EL_CHG  ! in [eV/Tesla]
@@ -1365,16 +1365,16 @@ type is (particle_gc_relativistic)
             call project_single_particle_x(power_exchange_Emu,[psiN_mid,E_mid_keV,mumid],phase_proj_1_E,E_diff)
         end if ! use_trap_passing_for_PE 
         end if
-        ! (psi_N, mu, P_phi)
-        if (output_pe_mu_Pphi) then
+        ! (psi_N, vpar, mu)
+        if (output_pe_vpar_mu) then
           if(use_trap_passing_for_PE) then
             if (trap_pass_arr(j) .eq. ORBIT_TRAPPED) then
-              call project_single_particle_x(power_exchange_vpar_mu_trap,[psiN_mid,mumid,Pphi_mid],phase_proj_trap,E_diff)
+              call project_single_particle_x(power_exchange_vpar_mu_trap,[psiN_mid,vparmid,mumid],phase_proj_trap,E_diff)
             else if (trap_pass_arr(j) .eq. ORBIT_PASSING) then
-              call project_single_particle_x(power_exchange_vpar_mu_pass,[psiN_mid,mumid,Pphi_mid],phase_proj_1,E_diff)
+              call project_single_particle_x(power_exchange_vpar_mu_pass,[psiN_mid,vparmid,mumid],phase_proj_1,E_diff)
             end if
           else
-            call project_single_particle_x(power_exchange_vpar_mu,[psiN_mid,mumid,Pphi_mid],phase_proj_1,E_diff)
+            call project_single_particle_x(power_exchange_vpar_mu,[psiN_mid,vparmid,mumid],phase_proj_1,E_diff)
           end if ! use_trap_passing_for_PE
         end if
         ! (E, mu, P_phi)
@@ -1428,7 +1428,7 @@ end select
 ! Average the per-substep accumulation over the JOREK step (same as tae_loop_CGL)
 jorek_feedback%rhs = feedback_rhs / n_steps
 ! (psi_N, mu, P_phi)
-  if (output_pe_mu_Pphi) then
+  if (output_pe_vpar_mu) then
   if(use_trap_passing_for_PE) then
     power_exchange_vpar_mu_trap%values = power_exchange_vpar_mu_trap%values + phase_proj_trap
     power_exchange_vpar_mu_pass%values = power_exchange_vpar_mu_pass%values + phase_proj_1
