@@ -134,7 +134,7 @@ tstep_keep       = tstep
 ! - Clamp the step counts to >= 1 so mod(ino, POWER_EXCHANGE_STEPS) can never divide by zero.
 if (nout_projection .le. 0) nout_projection = nout
 POWER_EXCHANGE_STEPS =  max(nout_projection*2, 1)
-RZ_OUTPUT_STEPS      =  max(nout_projection*5, 1)
+RZ_OUTPUT_STEPS      =  max(nout*50, 1)
 PARTICLE_OUTPUT_STEPS = max(nout*50, 1)
 
 ! Set up the field reader
@@ -265,17 +265,17 @@ if (.not. restart_particles) then
   ! 1. gdf_sampler -> reject sampling with pdf -> repeat until all particles are sampled
   ! 2. convert with sampler to particle function  
     
-  ! ********** WANG2020 in flux coordinates: f(psiN,p) = exp(-psiN/0.4^2) * f_MJ(p)/sup(f_MJ) **********
-  ! r/a ~ sqrt(psiN) so the wang2020 spatial profile exp(-(r/a/0.4)^2) becomes exp(-psiN/0.16).
-  ! NOTE: PsiNThetaPhiP_to_gc_relativistic_cb uses the isotropic split only when Lambda_peak <= 0.01,
-  !       so the namelist MUST keep Lambda_peak = -1 (isotropic) for the wang2020 setup.
+  allocate(phase_space_bounds_RZPhiP(5,2))
+  phase_space_bounds_RZPhiP(:, 1) = [Rbox(1),  Zbox(1), Phibound(1), Pbound(1), 0.d0] ! min for R, Z, phi, p [AMU·m/s], u_beta
+  phase_space_bounds_RZPhiP(:, 2) = [Rbox(2),  Zbox(2), Phibound(2), Pbound(2), 1.d0] ! max for R, Z, phi, p [AMU·m/s], u_beta
+
   allocate(phase_space_bounds_psiNThetaPhiP(5,2))
   phase_space_bounds_psiNThetaPhiP(:, 1) = [0.01d0, Poloidalbound(1), Phibound(1), Pbound(1), 0.d0] ! min for psiN, theta, phi, p [AMU·m/s] , u_beta
   phase_space_bounds_psiNThetaPhiP(:, 2) = [0.99d0, Poloidalbound(2), Phibound(2), Pbound(2), 1.d0] ! max for psiN, theta, phi, p [AMU·m/s] , u_beta
 
   select case(trim(particle_pusher))
   case('gc_rel')
-    call initialise_particles_in_phase_space(n_variables, sim%groups(1)%particles, sim%fields, pcg32_rng(), pdf_psiN_p_wang2020, &
+    call initialise_particles_in_phase_space(n_variables, sim%groups(1)%particles, sim%fields, pcg32_rng(), pdf_psiN_p_Relativistic_MJ, &
     particle_weight_one, gdf_uniform, gdf_PsiNThetaPhi_EorP_sampler, 1.001d0, 1.0d0, &
     PsiNThetaPhiP_to_gc_relativistic_cb, sim%groups(1)%mass, sim%time, phase_space_bounds_psiNThetaPhiP, &
     n_real_pdf_param_in=n_real_pdf_param, real_pdf_param_in=real_pdf_param,& ! parameters for pdf
@@ -283,7 +283,7 @@ if (.not. restart_particles) then
     n_real_samp_to_part_param_in=n_real_gdf_param, real_samp_to_part_param_in=real_gdf_param, n_int_samp_to_part_param_in=n_int_param_sampler, int_samp_to_part_param_in=int_param_sampler & ! parameters for sample_to_gc_relativistic
     )
   case('kinetic_rel')
-    call initialise_particles_in_phase_space(n_variables, sim%groups(1)%particles, sim%fields, pcg32_rng(), pdf_psiN_p_wang2020, &
+    call initialise_particles_in_phase_space(n_variables, sim%groups(1)%particles, sim%fields, pcg32_rng(), pdf_psiN_p_Relativistic_MJ, &
     particle_weight_one, gdf_uniform, gdf_PsiNThetaPhi_EorP_sampler, 1.001d0, 1.0d0, &
     PsiNThetaPhiP_to_kinetic_relativistic_cb, sim%groups(1)%mass, sim%time, phase_space_bounds_psiNThetaPhiP, &
     n_real_pdf_param_in=n_real_pdf_param, real_pdf_param_in=real_pdf_param,& ! parameters for pdf
@@ -291,6 +291,8 @@ if (.not. restart_particles) then
     n_real_samp_to_part_param_in=n_real_gdf_param, real_samp_to_part_param_in=real_gdf_param, n_int_samp_to_part_param_in=n_int_param_sampler, int_samp_to_part_param_in=int_param_sampler & ! parameters for sample_to_kinetic_relativistic
     )
   end select
+  deallocate(phase_space_bounds_RZPhiP)
+  deallocate(phase_space_bounds_psiNThetaPhiP)
   ! ********************************************************************************
 
   ! ********** distribution f(E, P_phi) as function of invariants via rejection sampling in (R,Z,phi,ppar,mu) this distr df/dt = 0 for a few hundreds of Alfven times
@@ -466,8 +468,8 @@ call with(sim,psiN_dist)
 call output_phase_project(psiN_dist,0,output_grids_in=.true.)
 call with(sim,KE_dist)
 call output_phase_project(KE_dist,0,output_grids_in=.true.)
-! call with(sim,RZ_dist)
-! call output_phase_project(RZ_dist,0,output_grids_in=.true.)
+call with(sim,RZ_dist)
+call output_phase_project(RZ_dist,0,output_grids_in=.true.)
 
 ! Set up (E, P_phi, mu) projection to directly verify invariance of f(E,P_phi,mu)
 ! dim 1: kinetic energy [keV], dim 2: canonical toroidal angular momentum P_phi/amu [AMU·m²/s], dim 3: magnetic moment [keV/T]
@@ -529,22 +531,20 @@ end if
 !   dim 3: P_phi (canonical toroidal angular momentum)  [AMU·m²/s]
 ! Grid: moderate memory, high resolution on P_phi.
 if (use_pe_EmuPphi) then
-  power_exchange_EmuPphi = new_phase_space_projection(ndim=3,res=[101,121,401], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi")
+  power_exchange_EmuPphi = new_phase_space_projection(ndim=3,res=[151,201,101], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi")
   power_exchange_EmuPphi%values = 0.0d0
-  power_exchange_EmuPphi_trap = new_phase_space_projection(ndim=3,res=[101,121,401], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi_trap")
+  power_exchange_EmuPphi_trap = new_phase_space_projection(ndim=3,res=[151,201,101], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi_trap")
   power_exchange_EmuPphi_trap%values = 0.0d0
-  power_exchange_EmuPphi_pass = new_phase_space_projection(ndim=3,res=[101,121,401], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi_pass")
+  power_exchange_EmuPphi_pass = new_phase_space_projection(ndim=3,res=[151,201,101], start=[0.d0,0.d0,7.d5], end=[1.d3,1.0d6,0.8d7],basename="power_exchange_EmuPphi_pass")
   power_exchange_EmuPphi_pass%values = 0.0d0
   call output_phase_project(power_exchange_EmuPphi, 0, output_grids_in=.true.)
 end if
 
 ! Project particles on the grid (1) r (2) L = (omega_0 - n omega_phi) / omega_theta
-! res_num_trap = new_phase_space_projection(ndim=2,res=[91,151],start=[0.d0, -13.d0],end=[amin, +13.d0], basename='res_num_trap_r')  ! for r
-res_num_trap = new_phase_space_projection(ndim=2,res=[81,161],start=[0.d0, -13.d0],end=[1.d0, +13.d0], basename='res_num_trap_psiN') 
+res_num_trap = new_phase_space_projection(ndim=2,res=[131,141],start=[0.d0, -13.d0],end=[1.d0, +13.d0], basename='res_num_trap_psiN') 
 res_num_trap%values = 0.d0
 call output_phase_project(res_num_trap, 0, output_grids_in=.true.)
-! res_num_pass = new_phase_space_projection(ndim=2,res=[91,151],start=[0.d0, -13.d0],end=[amin, +13.d0], basename='res_num_pass_r') ! for r
-res_num_pass = new_phase_space_projection(ndim=2,res=[81,161],start=[0.d0, -13.d0],end=[1.d0, +13.d0], basename='res_num_pass_psiN') 
+res_num_pass = new_phase_space_projection(ndim=2,res=[131,141],start=[0.d0, -13.d0],end=[1.d0, +13.d0], basename='res_num_pass_psiN') 
 res_num_pass%values = 0.d0
 call output_phase_project(res_num_pass, 0, output_grids_in=.true.)
 
@@ -1022,9 +1022,7 @@ real*8    :: v_kin_temp, E(3), B(3), psi, psiN, psiN_mid, U, n_e, T_e, rz_old(2)
 real*8    :: R_g, Z_g, R_s, R_t, Z_s, Z_t, xjac, HZ(n_tor), HH(4,4), HH_s(4,4), HH_t(4,4)
 real*8    :: gamma, target_time, dt_local, tmid, t
 real*8    :: b_norm_r, b_norm_z, b_norm_phi, p2_par, p2_perp, p_atrop
-logical   :: fb_valid
 real*8    :: fitsinevpar(4), fitsinemu(4), fitsineE(4), fitsineB(4), omega, mumid, vparmid, pparmid, Pphi_mid, E_mid_keV, mu_start, vpar_start, B_start, mu_end, vpar_end, B_end, E_diff, E_i, avgB, B_mag
-real*8    :: rcontainer(n_steps)
 logical   :: midpoint_stored
 real*8, parameter :: AMU_C2_EV = ATOMIC_MASS_UNIT * SPEED_OF_LIGHT**2 / EL_CHG ! rest-mass energy of 1 amu in eV. 
 !$ real*8 :: w0, w1, mmm(3)
@@ -1040,7 +1038,7 @@ integer :: n_use_p
 
 integer, intent(in)   :: n_steps
 integer   :: i, j, k, l, m, i_elm_old, i_elm 
-integer   :: seed, n_stream, ierr, nthreads
+integer   :: seed, n_stream, ierr, nthreads, proj_factor
 integer   :: i_tor, index_lm, i_elm_temp
 integer   :: n_particles, ifail
 integer   :: log_unit
@@ -1059,6 +1057,7 @@ t_norm   = sqrt((MU_ZERO * rho_norm))                           ! t_SI   = t_nor
 v_norm   = 1.d0 / t_norm                                        ! V_SI   = v_norm * v_jorek
 E_norm   = 1.5d0 / MU_ZERO                                      ! E_SI   = E_norm * E_jorek
 M_norm   = rho_norm * v_norm                                    ! momentum normalisation
+proj_factor = n_steps
 
 jorek_feedback%rhs_gather_time = jorek_feedback%rhs_gather_time + n_steps * timesteps
 allocate(feedback_rhs,source=jorek_feedback%rhs)
@@ -1111,7 +1110,7 @@ type is (particle_gc_relativistic)
  !$omp parallel do default(shared) & 
 #else
  !$omp parallel do default(none) &
- !$omp shared(sim, particles, n_steps, timesteps, rng, particle_start_time,        &
+ !$omp shared(sim, particles, n_steps, timesteps, rng, particle_start_time, proj_factor,        &
  !$omp rho_norm, t_norm, v_norm, E_norm, M_norm, N_norm, target_time, tmid,       &
  !$omp jorek_feedback, power_exchange_vpar_mu, power_exchange_vpar_mu_trap, power_exchange_vpar_mu_pass,                &
  !$omp power_exchange_Emu, power_exchange_Emu_trap, power_exchange_Emu_pass,        &
@@ -1127,7 +1126,7 @@ type is (particle_gc_relativistic)
  !$omp i_elm_old, i_elm, n_e, T_e, E_diff, avgB, B_mag,                                               & 
  !$omp R_g, R_s, R_t, Z_g, Z_s, Z_t, xjac, HH, HH_s, HH_t, HZ, index_lm, ifail, gamma,                &
  !$omp omega, vparmid, pparmid, mumid, Pphi_mid, E_mid_keV, mu_start, vpar_start, B_start, mu_end, vpar_end, B_end, &
- !$omp dt_local, midpoint_stored, fb_valid,                                                            &
+ !$omp dt_local, midpoint_stored,                                                            &
  !$omp b_norm_r, b_norm_z, b_norm_phi, p2_par, p2_perp, p_atrop,                                      &
  !$omp theta_curr_p, theta_prev_p, theta_accum_p, dtheta_p, dtheta_prev_p,                              &
  !$omp phi_unwrap_p, phi_prev_p, t_ref_a_p, phi_ref_a_p, t_ref_b_p, phi_ref_b_p,                       &
@@ -1170,47 +1169,20 @@ type is (particle_gc_relativistic)
     t = particle_start_time
     dt_local = timesteps
     midpoint_stored = .false.
-    ! rcontainer = 0.d0
     
-    ! Push the particle over n_steps substeps. Bounded loop (as in tae_loop_CGL):
-    ! executes exactly n_steps iterations for confined particles, which matches
-    ! the /n_steps averaging below, and avoids floating-point drift issues of
-    ! accumulating t in a do-while condition.
+    ! Push the particle over n_steps substeps.
     do k=1,n_steps
-      if (particle_tmp%i_elm .le. 0) exit
+      if (particle_tmp%i_elm .le. 0 .or. particle_tmp%i_elm .gt. sim%fields%element_list%n_elements) exit
 
-      ! Time at the start of this substep: computed from k to avoid accumulating
-      ! rounding error in t across many substeps.
-      t = particle_start_time + real(k-1,8) * dt_local
-
-      ! if(k <= n_steps) rcontainer(k) = sqrt((particle_tmp%x(1)-ES%R_axis)**2 + (particle_tmp%x(2) - ES%Z_axis)**2)
       ! Store midpoint data for phase space projection
       if ((.not. midpoint_stored) .and. (t .ge. tmid)) then
         call copy_particle(particle_mid, particle_tmp)
         midpoint_stored = .true.
       endif
 
-      ! ---- Evaluate fields at the substep start for the CGL feedback ----
-      ! (particle_tmp%i_elm > 0 is guaranteed by the loop condition)
-      call sim%fields%calc_EBpsiU(t, particle_tmp%i_elm, particle_tmp%st, particle_tmp%x(3), E, B, psi, U)
-      B_mag = norm2(B)
-      gamma = compute_relativistic_factor(particle_tmp, sim%groups(1)%mass, B_mag)
-      ! Safety: do not accumulate feedback for runaway particles.
-      ! Normal EP have gamma ~ 1.00016 (300 keV D); gamma >= 100 indicates an
-      ! unphysical particle that would destabilise GMRES and corrupt diagnostics.
-      fb_valid = (gamma .lt. 1.d2)
-      ! Normalised b vector (physical R,Z,phi components)
-      b_norm_r   = B(1)/B_mag
-      b_norm_z   = B(2)/B_mag
-      b_norm_phi = B(3)/B_mag
-      ! Parallel & perpendicular momenta squared (per AMU)
-      p2_par  = particle_tmp%p(1)**2
-      p2_perp = 2.d0 * sim%groups(1)%mass * B_mag * particle_tmp%p(2)
-      ! Coefficient of b_i b_j in the CGL tensor (divided by gamma*mass below)
-      p_atrop = p2_par - 0.5d0 * p2_perp
-
       ! Push the particle and determine it's new location (fixed time step).
       call runge_kutta_fixed_dt_gc_push_jorek(sim%fields, t, dt_local, sim%groups(1)%mass, particle_tmp)
+      t = t + dt_local
 
       ! ---- Trapped/passing classification + omega_theta/omega_phi ----
       call classify_trap_pass(particle_tmp%x(1), particle_tmp%x(2), particle_tmp%x(3), &
@@ -1227,18 +1199,29 @@ type is (particle_gc_relativistic)
       !   !$omp end critical (trap_pass_log)
       ! endif
 
-      ! ---- Pressure-tensor feedback, accumulated per substep ----
-      ! B, p2_par and p2_perp are evaluated at the substep start (pre-push), while
-      ! the projection location (HH, HZ) is the post-push position - the same
-      ! pattern as tae_loop_CGL. Components are ordered as model307 use_pcs_full
-      ! expects them: 1: Pi_RR, 2: Pi_ZZ, 3: Pi_phiphi, 4: Pi_RZ, 5: Pi_Rphi, 6: Pi_Zphi.
-      !
-      ! use_CGL_pressure = .true. : gyrotropic CGL tensor
-      !     Pi_ij = [0.5*p_perp^2*delta_ij + (p_par^2 - 0.5*p_perp^2)*b_i b_j] / (gamma*m)
-      !   (requires use_pcs_full = .t. in the namelist)
-      ! use_CGL_pressure = .false.: isotropic tensor
-      !     Pi_ij = (1/3) p^2/(gamma*m) * delta_ij   (off-diagonal components stay 0)
-      if (fb_valid .and. particle_tmp%i_elm .gt. 0 .and. particle_tmp%i_elm .le. sim%fields%element_list%n_elements) then
+                              
+      ! ---- Pressure-tensor feedback: snapshot every proj_factor-th substep ----
+      ! Snapshot gate merged with the runaway/domain safety checks into one condition.
+      ! Normal EP have gamma ~ 1.00016 (300 keV D); gamma >= 100 indicates an
+      ! unphysical particle that would destabilise GMRES and corrupt diagnostics.
+      if (mod(k, proj_factor) .eq. 0 .and. &
+          particle_tmp%i_elm .gt. 0 .and. particle_tmp%i_elm .le. sim%fields%element_list%n_elements) then
+        
+      call sim%fields%calc_EBpsiU(t, particle_tmp%i_elm, particle_tmp%st, particle_tmp%x(3), E, B, psi, U)
+      B_mag = norm2(B)
+      gamma = compute_relativistic_factor(particle_tmp, sim%groups(1)%mass, B_mag)
+        if (gamma .ge. 100) exit
+        
+        ! Normalised b vector (physical R,Z,phi components)
+        b_norm_r   = B(1)/B_mag
+        b_norm_z   = B(2)/B_mag
+        b_norm_phi = B(3)/B_mag
+        ! Parallel & perpendicular momenta squared (per AMU)
+        p2_par  = particle_tmp%p(1)**2
+        p2_perp = 2.d0 * sim%groups(1)%mass * B_mag * particle_tmp%p(2)
+        ! Coefficient of b_i b_j in the CGL tensor (divided by gamma*mass below)
+        p_atrop = p2_par - 0.5d0 * p2_perp
+
         call basisfunctions(particle_tmp%st(1), particle_tmp%st(2), HH, HH_s, HH_t)
         call mode_moivre(particle_tmp%x(3), HZ)
 
@@ -1248,7 +1231,12 @@ type is (particle_gc_relativistic)
             v = HH(l,m) * sim%fields%element_list%element(particle_tmp%i_elm)%size(l,m)
 
             do i_tor=1,n_tor
-
+              ! 1: Pi_RR, 2: Pi_ZZ, 3: Pi_phiphi, 4: Pi_RZ, 5: Pi_Rphi, 6: Pi_Zphi.
+              !
+              ! (requires use_pcs_full = .t. in the namelist)
+              ! CGL             Pi_ij = [0.5*p_perp^2*delta_ij + (p_par^2 - 0.5*p_perp^2)*b_i b_j] / (gamma*m)
+              ! full-isotropic  Pi_ij = (1/3) p^2/(gamma*m) * delta_ij   (off-diagonal components stay 0) 
+              ! Evaluate fields at the substep start (pre-push) for the pressure snapshot.
               if (use_CGL_pressure) then
                 feedback_rhs(m,l,particle_tmp%i_elm,i_tor,1) = feedback_rhs(m,l,particle_tmp%i_elm,i_tor,1) &
                                                               + HZ(i_tor) * v * particle_tmp%weight * atomic_mass_unit &
@@ -1286,7 +1274,7 @@ type is (particle_gc_relativistic)
             enddo !< tor harmonic
           enddo   !< order
         enddo     !< vertex
-      endif
+      endif   ! end merged snapshot + safety gate
         
     end do ! n_steps substeps
 
@@ -1308,13 +1296,9 @@ type is (particle_gc_relativistic)
 
     i_elm = particle_tmp%i_elm
 
+    ! ************************ Compute power exchange ************************
     if (i_elm .gt. 0 .and. i_elm .le. sim%fields%element_list%n_elements) then
 
-      ! Time after the last substep (= target_time for confined particles)
-      t = particle_start_time + real(n_steps,8) * dt_local
-
-      call basisfunctions(particle_tmp%st(1), particle_tmp%st(2), HH, HH_s, HH_t)
-      call mode_moivre(particle_tmp%x(3), HZ)
       call sim%fields%calc_EBpsiU(t, particle_tmp%i_elm, particle_tmp%st, particle_tmp%x(3), E, B, psi, U)
       B_mag = norm2(B)
       gamma = compute_relativistic_factor(particle_tmp, sim%groups(1)%mass, B_mag)
@@ -1425,8 +1409,11 @@ end select
 
 ! close(log_unit)
 
-! Average the per-substep accumulation over the JOREK step (same as tae_loop_CGL)
-jorek_feedback%rhs = feedback_rhs / n_steps
+! Average the snapshot accumulation over the number of snapshots taken per JOREK step
+! (n_steps/proj_factor for confined particles; proj_factor = 1 reproduces the original
+!  per-substep averaging, proj_factor ~ n_steps gives ~1 snapshot per JOREK step).
+  if(sim%my_id .eq.0 ) write(*,"(A,I4,A,F4.0,A)") " PARTICLE LOOP: Projecting every",proj_factor," timesteps, for a total of ", real(n_steps / proj_factor, 8), " times."
+jorek_feedback%rhs = feedback_rhs / max(real(n_steps / proj_factor, 8), 1.d0)
 ! (psi_N, mu, P_phi)
   if (output_pe_vpar_mu) then
   if(use_trap_passing_for_PE) then
