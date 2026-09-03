@@ -982,6 +982,7 @@ module phys_module
   real*8  :: pdf_omega        !< skewed-normal width omega (parametric pdf)
   real*8  :: pdf_alpha        !< skewed-normal skewness alpha (parametric pdf)
   real*8  :: pdf_flatness     !< skewed-normal generalized Gaussian exponent (parametric pdf)
+  real*8  :: sigma_KE         !< standard deviation of the kinetic energy distribution (parametric pdf)
 
   real*8  :: puff_rate        !< physical atoms/sec puffed (shared over 2 places)
   real*8  :: r_valve          !< radius of poloidal circular source

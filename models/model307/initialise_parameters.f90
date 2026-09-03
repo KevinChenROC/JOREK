@@ -140,7 +140,7 @@ namelist /in1/  tstep, nstep, tstep_n, nstep_n,                     &
                 filter_perp,    filter_hyper,    filter_par,        &
                 filter_perp_n0, filter_hyper_n0, filter_par_n0,     &
                 T_EP_eV, RHO_EP, pdf_A, pdf_xi, pdf_omega,         &
-                pdf_alpha, pdf_flatness,                    &
+                pdf_alpha, pdf_flatness, sigma_KE, &
                 particle_pusher, Lambda_peak, delta_Lambda,                    &
                 output_pe_E_mu, output_pe_vpar_mu,                    &
                 use_pe_EmuPphi,                                     &

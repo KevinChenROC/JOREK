@@ -871,6 +871,7 @@ pdf_xi             = 0.2580d0  ! skewed-normal location
 pdf_omega          = 0.1693d0  ! skewed-normal width
 pdf_alpha          = 2.1910d0  ! skewed-normal skewness
 pdf_flatness       = 3.3d0     ! generalized Gaussian exponent
+sigma_KE           = -99.d0
 restart_particles  = .false.
 use_ncs            = .false.
 use_ccs            = .false.

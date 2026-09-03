@@ -16,7 +16,7 @@ use nodes_elements
 use phys_module, only: tstep, restart, t_start, restart_particles, nout_projection, nout
 use phys_module, only: CENTRAL_MASS, CENTRAL_DENSITY, xcase, xpoint, amin, F0, R_geo
 use phys_module, only: n_particles, nstep_particles, nsubstep_particles, tstep_particles
-use phys_module, only: filter_perp, filter_hyper, filter_par, filter_perp_n0, filter_hyper_n0, filter_par_n0, T_EP_eV, RHO_EP, Lambda_peak, delta_Lambda, output_pe_E_mu, output_pe_vpar_mu, use_pe_EmuPphi
+use phys_module, only: filter_perp, filter_hyper, filter_par, filter_perp_n0, filter_hyper_n0, filter_par_n0, T_EP_eV, RHO_EP, Lambda_peak, delta_Lambda, output_pe_E_mu, output_pe_vpar_mu, use_pe_EmuPphi, sigma_KE
 use phys_module, only: n_mode_families
 use phys_module, only: particle_pusher
 

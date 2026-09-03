@@ -3,13 +3,13 @@ module mod_tae_loop_init_callbacks
   use equil_info
   use mod_fields, only: fields_base
   use mod_particle_types, only: particle_base, particle_gc_relativistic, particle_kinetic_relativistic
-  use phys_module, only: pdf_A, pdf_xi, pdf_omega, pdf_alpha, pdf_flatness,T_EP_eV, F0, RHO_EP, Lambda_peak, delta_Lambda, R_geo
+  use phys_module, only: pdf_A, pdf_xi, pdf_omega, pdf_alpha, pdf_flatness,T_EP_eV, F0, RHO_EP, Lambda_peak, delta_Lambda, R_geo, sigma_KE
   use mod_bessel, only: bessel_k2exp
   use mod_sampling, only: c_erfinv
 
   implicit none
   private
-  public gdf_uniform, gdf_sqrtPsiN_p_sampler, gdf_RZPhiP_sampler_cb, pdf_RZ_p_HL2A_flat_decay, pdf_r_p_wang2020, pdf_sqrtPsiN_p_HL2A_parametric, pdf_psiN_p_Relativistic_MJ, pdf_psiN_E_parametric, gdf_PsiNThetaPhi_EorP_sampler, pdf_RZ_p_relativistic_MJ, pdf_psiN_p_wang2020
+  public gdf_uniform, gdf_sqrtPsiN_p_sampler, gdf_RZPhiP_sampler_cb, pdf_RZ_p_HL2A_flat_decay, pdf_r_p_wang2020, pdf_sqrtPsiN_p_HL2A_parametric, pdf_psiN_p_Relativistic_MJ, pdf_psiN_p_Relativistic_Gaussian_KE, pdf_psiN_E_parametric, gdf_PsiNThetaPhi_EorP_sampler, pdf_RZ_p_relativistic_MJ, pdf_psiN_p_wang2020
   public RZPhiP_to_gc_relativistic, RZPhiPparMu_to_gc_relativistic_cb, RZPhi_to_gc_relativistic_temp_gradient, PsiNThetaPhiP_to_gc_relativistic_cb, PsiNThetaPhiP_to_kinetic_relativistic_cb
   public sqrtPsiN_Theta_Phi_P_to_gc_relativistic, PsiNThetaPhiE_to_gc_relativistic_cb, particle_weight_one, log_f_MJ, gamma_relativistic
   public pdf_E_Pphi, gdf_RZPhiPparMu_sampler
@@ -334,6 +334,55 @@ n_real_param,real_param,n_int_param,int_param) result(pdf)
 
   pdf = f_psi * f_MJ
 end function pdf_psiN_p_Relativistic_MJ
+
+
+function pdf_psiN_p_Relativistic_Gaussian_KE(nx,x,st,time,i_elm,fields,x_min,x_max,&
+n_real_param,real_param,n_int_param,int_param) result(pdf)
+  !! Skewed-normal radial profile in psi_N (pdf_A, pdf_xi, pdf_omega, pdf_alpha, pdf_flatness)
+  !! times a Gaussian in the relativistic kinetic energy:
+  !!     f_KE(KE) = exp( -(KE - T_EP_eV)^2 / (2 * sigma_KE^2) )    with sup(f_KE) = 1
+  !! where KE = (gamma - 1) * m * c^2 is the relativistic kinetic energy in [eV],
+  !! T_EP_eV is the center (in [eV]) and sigma_KE the standard deviation (in [eV]).
+  use mod_fields, only: fields_base
+  implicit none
+  integer,intent(in)                          :: nx,i_elm,n_real_param,n_int_param
+  integer,dimension(:),allocatable,intent(in) :: int_param
+  real*8,intent(in)                           :: time
+  real*8,dimension(nx),intent(in)             :: x,x_min,x_max
+  real*8,dimension(2),intent(in)              :: st
+  class(fields_base),intent(in)               :: fields
+  real*8,dimension(:),allocatable,intent(in)  :: real_param
+  !> Outputs:
+  real*8 :: pdf
+  !> Variables: 
+  real *8 :: psi_norm, p, f_psi, f_KE, mass_AMU, gamma, KE_eV
+
+  ! Here x = [psiN,theta,phi,p,u_beta]
+  psi_norm = x(1)
+  if (psi_norm < 0d0 .or. psi_norm > 1d0) then
+    pdf = 0d0
+    return
+  end if
+
+  f_psi = skewed_normal(psi_norm, pdf_A, pdf_xi, pdf_omega, pdf_alpha, pdf_flatness)
+
+  ! Relativistic kinetic energy KE = (gamma - 1) * m * c^2 in [eV];
+  ! p has unit [AMU·m/s], mass_AMU in [AMU]
+  mass_AMU = real_param(3) ! in [AMU]
+  p        = x(4)          ! in [AMU·m/s]
+  gamma    = sqrt(1.d0 + (p/(mass_AMU*SPEED_OF_LIGHT))**2)
+  KE_eV    = (gamma - 1.d0) * mass_AMU * (ATOMIC_MASS_UNIT / EL_CHG * SPEED_OF_LIGHT**2)
+
+  ! Gaussian in KE centered at T_EP_eV [eV] with sup(f_KE) = 1
+  if(sigma_KE <= 0d0) then
+    write(*,*) "Error: sigma_KE <= 0 in pdf_psiN_p_Relativistic_Gaussian_KE"
+    pdf = 0d0
+    return
+  end if
+
+  f_KE = exp(-(KE_eV - T_EP_eV)**2 / (2.d0 * sigma_KE**2))
+  pdf = f_psi * f_KE
+end function pdf_psiN_p_Relativistic_Gaussian_KE
 
 
 function pdf_psiN_E_parametric(nx,x,st,time,i_elm,fields,x_min,x_max,&

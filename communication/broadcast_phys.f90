@@ -867,6 +867,7 @@ if (my_id .eq. 0) then
   call MPI_PACK(pdf_omega,             1,MPI_REAL8,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
   call MPI_PACK(pdf_alpha,             1,MPI_REAL8,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
   call MPI_PACK(pdf_flatness,             1,MPI_REAL8,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
+  call MPI_PACK(sigma_KE,             1,MPI_REAL8,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
 
   call MPI_PACK(use_manual_random_seed, 1,MPI_LOGICAL,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
   call MPI_PACK(manual_seed,            1,MPI_INTEGER,buffer,bufsize,position,MPI_COMM_WORLD,ierr)
@@ -1744,6 +1745,7 @@ if (my_id .ne. 0) then
   call MPI_UNPACK(buffer,bufsize,position,pdf_omega,              1,MPI_REAL8,MPI_COMM_WORLD,ierr)
   call MPI_UNPACK(buffer,bufsize,position,pdf_alpha,              1,MPI_REAL8,MPI_COMM_WORLD,ierr)
   call MPI_UNPACK(buffer,bufsize,position,pdf_flatness,           1,MPI_REAL8,MPI_COMM_WORLD,ierr)
+  call MPI_UNPACK(buffer,bufsize,position,sigma_KE,           1,MPI_REAL8,MPI_COMM_WORLD,ierr)
 
   call MPI_UNPACK(buffer,bufsize,position,use_manual_random_seed, 1,MPI_LOGICAL,MPI_COMM_WORLD,ierr)
   call MPI_UNPACK(buffer,bufsize,position,manual_seed,            1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
